@@ -1,470 +1,519 @@
+// const express = require('express');
+// const router = express.Router();
+
+// const dayjs = require('dayjs');
+// const utc = require('dayjs/plugin/utc');
+// const timezone = require('dayjs/plugin/timezone');
+// dayjs.extend(utc);
+// dayjs.extend(timezone);
+
+// const createSensorRoutes = (tableName, sensorCount = 8) => {
+//     router.post(`/api/${tableName}`, async (req, res) => {
+//         try {
+//             const sensors = [...Array(sensorCount)].map((_, i) =>
+//                 req.body[`sensor${i + 1}_temperature`]
+//             );
+
+//             if (sensors.some(val => val == null)) {
+//                 return res.status(400).json({ error: "Thiếu dữ liệu sensor" });
+//             }
+
+//             const placeholders = sensors.map((_, i) => `$${i + 1}`).join(', ');
+//             const columns = [...Array(sensorCount)]
+//                 .map((_, i) => `sensor${i + 1}_temperature`)
+//                 .join(', ');
+
+//             const query = `
+//                 INSERT INTO iot.${tableName} (${columns}, timestamp)
+//                 VALUES (${placeholders}, CURRENT_TIMESTAMP)
+//                 RETURNING id;
+//             `;
+
+//             const result = await req.client.query(query, sensors);
+//             const newId = result.rows[0]?.id;
+
+//             if (!newId) {
+//                 throw new Error("Không thể lấy ID mới");
+//             }
+
+//             res.status(201).json({ id: newId, message: "Thêm dữ liệu thành công" });
+//         } catch (error) {
+//             console.error(`❌ Lỗi thêm dữ liệu ${tableName}:`, error.message);
+//             res.status(500).json({ error: "Lỗi server" });
+//         }
+//     });
+//     router.get(`/api/daily/${tableName}`, async (req, res) => {
+//         try {
+//             const { date, start_time = "00:00:00", end_time = "23:59:59" } = req.query;
+
+//             if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+//                 return res.status(400).json({ error: "Định dạng ngày không hợp lệ (YYYY-MM-DD)" });
+//             }
+
+//             const startDateTime = `${date} ${start_time}`;
+//             const endDateTime = `${date} ${end_time}`;
+
+//             if (new Date(startDateTime) >= new Date(endDateTime)) {
+//                 return res.status(400).json({ error: "Thời gian bắt đầu phải sớm hơn thời gian kết thúc" });
+//             }
+
+//             const columns = [...Array(sensorCount)]
+//                 .map((_, i) => `sensor${i + 1}_temperature`)
+//                 .join(', ');
+
+//             const result = await req.client.query(`
+//                 SELECT id, TO_CHAR(timestamp, 'YYYY-MM-DD HH24:MI:SS') AS timestamp,
+//                     ${columns}
+//                 FROM iot.${tableName}
+//                 WHERE timestamp BETWEEN $1 AND $2
+//                 ORDER BY timestamp ASC
+//             `, [startDateTime, endDateTime]);
+
+//             res.status(200).json({
+//                 data: result.rows,
+//                 date, start_time, end_time,
+//             });
+//         } catch (error) {
+//             console.error(`❌ Lỗi lấy dữ liệu ${tableName}:`, error.message);
+//             res.status(500).json({ error: "Lỗi server" });
+//         }
+//     });
+//     router.get(`/api/${tableName}`, async (req, res) => {
+//         try {
+//             const { start_time, end_time } = req.query;
+
+//             if (!start_time || !end_time) {
+//                 return res.status(400).json({ error: "Thiếu start_time hoặc end_time" });
+//             }
+
+//             const startDate = new Date(start_time);
+//             const endDate = new Date(end_time);
+
+//             if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+//                 return res.status(400).json({ error: "Định dạng thời gian không hợp lệ (YYYY-MM-DD HH:mm:ss hoặc ISO 8601)" });
+//             }
+
+//             if (startDate >= endDate) {
+//                 return res.status(400).json({ error: "Thời gian bắt đầu phải sớm hơn thời gian kết thúc" });
+//             }
+
+//             const columns = [...Array(sensorCount)]
+//                 .map((_, i) => `sensor${i + 1}_temperature`)
+//                 .join(', ');
+
+//             const result = await req.client.query(`
+//                 SELECT id, TO_CHAR(timestamp, 'YYYY-MM-DD HH24:MI:SS') AS timestamp,
+//                     ${columns}
+//                 FROM iot.${tableName}
+//                 WHERE timestamp BETWEEN $1 AND $2
+//                 ORDER BY timestamp ASC
+//             `, [start_time, end_time]);
+
+//             res.status(200).json({
+//                 data: result.rows,
+//                 start_time,
+//                 end_time,
+//             });
+//         } catch (error) {
+//             console.error(`❌ Lỗi lấy dữ liệu ${tableName}:`, error.message);
+//             res.status(500).json({ error: "Lỗi server" });
+//         }
+//     });
+//     router.get(`/api/${tableName}/latest`, async (req, res) => {
+//         try {
+//             const columns = [...Array(sensorCount)]
+//                 .map((_, i) => `sensor${i + 1}_temperature`)
+//                 .join(', ');
+
+//             const query = `
+//                 SELECT id, TO_CHAR(timestamp, 'YYYY-MM-DD HH24:MI:SS') AS timestamp,
+//                     ${columns}
+//                 FROM iot.${tableName}
+//                 ORDER BY timestamp DESC
+//                 LIMIT 1;
+//             `;
+
+//             const result = await req.client.query(query);
+
+//             if (result.rows.length === 0) {
+//                 return res.status(404).json({
+//                     error: `Không tìm thấy dữ liệu trong bảng ${tableName}`
+//                 });
+//             }
+
+//             res.status(200).json({
+//                 data: result.rows[0],
+//                 table: tableName
+//             });
+//         } catch (error) {
+//             console.error(`❌ Lỗi lấy dữ liệu mới nhất ${tableName}:`, error.message);
+//             res.status(500).json({ error: "Lỗi server" });
+//         }
+//     });
+//     router.get(`/api/${tableName}/sample`, async (req, res) => {
+//         const formatLocalTimestamp = (ts) => {
+//             const date = new Date(ts);
+//             const pad = (n) => String(n).padStart(2, '0');
+//             return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+//         };
+
+//         try {
+//             const { start_time, end_time, interval = 60 } = req.query;
+
+//             if (!start_time || !end_time) {
+//                 return res.status(400).json({ error: "Thiếu start_time hoặc end_time" });
+//             }
+
+//             const startUTC = new Date(start_time);
+//             const endUTC = new Date(end_time);
+
+//             if (isNaN(startUTC.getTime()) || isNaN(endUTC.getTime())) {
+//                 return res.status(400).json({ error: "Định dạng thời gian không hợp lệ" });
+//             }
+
+//             if (startUTC >= endUTC) {
+//                 return res.status(400).json({ error: "Thời gian bắt đầu phải sớm hơn thời gian kết thúc" });
+//             }
+
+//             const columns = [...Array(sensorCount)]
+//                 .map((_, i) => `sensor${i + 1}_temperature`)
+//                 .join(', ');
+
+//             const result = await req.client.query(`
+//             SELECT id, timestamp AS timestamp_utc, ${columns}
+//             FROM iot.${tableName}
+//             WHERE timestamp BETWEEN $1 AND $2
+//             ORDER BY timestamp ASC
+//         `, [startUTC, endUTC]);
+
+//             const rawData = result.rows;
+//             if (!rawData.length) {
+//                 return res.status(404).json({ error: "Không tìm thấy dữ liệu" });
+//             }
+
+//             const sampleIntervalMs = parseInt(interval) * 60 * 1000;
+//             const samplePoints = [];
+//             let currentTime = new Date(startUTC);
+
+//             while (currentTime <= endUTC) {
+//                 samplePoints.push(new Date(currentTime));
+//                 currentTime = new Date(currentTime.getTime() + sampleIntervalMs);
+//             }
+
+//             const isZeroSensor = (record) => {
+//                 return [...Array(sensorCount)].every((_, i) => record[`sensor${i + 1}_temperature`] === 0);
+//             };
+
+//             const seenTimestamps = new Set();
+//             const maxDiffMs = 30 * 1000;
+
+//             const sampledData = samplePoints.map(targetTime => {
+//                 let closestRecord = null;
+//                 let minDiff = Infinity;
+
+//                 rawData.forEach(record => {
+//                     const recordTime = new Date(record.timestamp_utc);
+//                     const diff = Math.abs(recordTime - targetTime);
+//                     const recordKey = `${record.timestamp_utc}`; // dùng để kiểm tra trùng timestamp
+
+//                     if (diff < minDiff && diff <= maxDiffMs && !seenTimestamps.has(recordKey)) {
+//                         minDiff = diff;
+//                         closestRecord = record;
+//                     }
+//                 });
+
+//                 if (closestRecord) {
+//                     const recordKey = `${closestRecord.timestamp_utc}`;
+//                     seenTimestamps.add(recordKey);
+//                     return { ...closestRecord };
+//                 }
+
+//                 return null;
+//             }).filter(Boolean);
+
+
+//             const addBoundaryPoint = (time) => {
+//                 const exists = sampledData.some(d =>
+//                     Math.abs(new Date(d.timestamp_utc) - time) < 1000
+//                 );
+
+//                 if (!exists) {
+//                     let closestRecord = null;
+//                     let minDiff = Infinity;
+
+//                     rawData.forEach(record => {
+//                         const diff = Math.abs(new Date(record.timestamp_utc) - time);
+//                         if (diff < minDiff) {
+//                             minDiff = diff;
+//                             closestRecord = record;
+//                         }
+//                     });
+
+//                     if (closestRecord) {
+//                         sampledData.push({ ...closestRecord });
+//                     }
+//                 }
+//             };
+
+//             addBoundaryPoint(startUTC);
+//             addBoundaryPoint(endUTC);
+
+
+//             // Loại bỏ trùng sau khi thêm mốc biên
+//             const uniqueSampledData = [];
+//             const seen = new Set();
+
+//             for (const d of sampledData) {
+//                 const key = d.timestamp_utc;
+//                 if (!seen.has(key)) {
+//                     seen.add(key);
+//                     uniqueSampledData.push(d);
+//                 }
+//             }
+
+//             // Thay thế bản ghi cuối nếu toàn 0
+//             uniqueSampledData.sort((a, b) => new Date(a.timestamp_utc) - new Date(b.timestamp_utc));
+
+//             const last = uniqueSampledData[uniqueSampledData.length - 1];
+
+//             if (isZeroSensor(last)) {
+//                 const alt = rawData
+//                     .filter(rec =>
+//                         new Date(rec.timestamp_utc) < endUTC &&
+//                         !isZeroSensor(rec)
+//                     )
+//                     .sort((a, b) =>
+//                         Math.abs(new Date(a.timestamp_utc) - endUTC) - Math.abs(new Date(b.timestamp_utc) - endUTC)
+//                     )[0];
+
+//                 if (alt) {
+//                     uniqueSampledData[uniqueSampledData.length - 1] = { ...alt };
+//                 }
+//             }
+
+
+//             const responseData = uniqueSampledData
+//                 .map(item => ({
+//                     id: item.id,
+//                     timestamp: formatLocalTimestamp(item.timestamp_utc),
+//                     ...Object.fromEntries(
+//                         columns.split(', ').map(col => [col, item[col]])
+//                     )
+//                 }))
+//                 .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+//             console.log('First 3 records:', responseData.slice(0, 3));
+//             console.log('Last 3 records:', responseData.slice(-3));
+
+//             res.status(200).json({
+//                 data: responseData,
+//                 meta: {
+//                     start_time: formatLocalTimestamp(startUTC),
+//                     end_time: formatLocalTimestamp(endUTC),
+//                     interval_minutes: parseInt(interval),
+//                     sample_count: responseData.length,
+//                     original_count: rawData.length,
+//                     timezone: "Asia/Ho_Chi_Minh (GMT+7)"
+//                 }
+//             });
+
+//         } catch (error) {
+//             console.error(`❌ Lỗi lấy dữ liệu ${tableName}:`, error);
+//             res.status(500).json({
+//                 error: "Lỗi server",
+//                 details: error.message,
+//                 hint: "Kiểm tra log server để biết thêm chi tiết"
+//             });
+//         }
+//     });
+// };
+
+// ['t4', 't5', 'g1', 'g2', 'g3'].forEach(table => createSensorRoutes(table));
+
+// module.exports = router;
 const express = require('express');
 const router = express.Router();
 
 const dayjs = require('dayjs');
-const utc = require('dayjs/plugin/utc');
-const timezone = require('dayjs/plugin/timezone');
-dayjs.extend(utc);
-dayjs.extend(timezone);
-
-const createSensorRoutes = (tableName, sensorCount = 8) => {
-    router.post(`/api/${tableName}`, async (req, res) => {
-        try {
-            const sensors = [...Array(sensorCount)].map((_, i) =>
-                req.body[`sensor${i + 1}_temperature`]
-            );
-
-            if (sensors.some(val => val == null)) {
-                return res.status(400).json({ error: "Thiếu dữ liệu sensor" });
-            }
-
-            const placeholders = sensors.map((_, i) => `$${i + 1}`).join(', ');
-            const columns = [...Array(sensorCount)]
-                .map((_, i) => `sensor${i + 1}_temperature`)
-                .join(', ');
-
-            const query = `
-                INSERT INTO iot.${tableName} (${columns}, timestamp)
-                VALUES (${placeholders}, CURRENT_TIMESTAMP)
-                RETURNING id;
-            `;
-
-            const result = await req.client.query(query, sensors);
-            const newId = result.rows[0]?.id;
-
-            if (!newId) {
-                throw new Error("Không thể lấy ID mới");
-            }
-
-            res.status(201).json({ id: newId, message: "Thêm dữ liệu thành công" });
-        } catch (error) {
-            console.error(`❌ Lỗi thêm dữ liệu ${tableName}:`, error.message);
-            res.status(500).json({ error: "Lỗi server" });
-        }
-    });
-    router.get(`/api/daily/${tableName}`, async (req, res) => {
-        try {
-            const { date, start_time = "00:00:00", end_time = "23:59:59" } = req.query;
-
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-                return res.status(400).json({ error: "Định dạng ngày không hợp lệ (YYYY-MM-DD)" });
-            }
-
-            const startDateTime = `${date} ${start_time}`;
-            const endDateTime = `${date} ${end_time}`;
-
-            if (new Date(startDateTime) >= new Date(endDateTime)) {
-                return res.status(400).json({ error: "Thời gian bắt đầu phải sớm hơn thời gian kết thúc" });
-            }
-
-            const columns = [...Array(sensorCount)]
-                .map((_, i) => `sensor${i + 1}_temperature`)
-                .join(', ');
-
-            const result = await req.client.query(`
-                SELECT id, TO_CHAR(timestamp, 'YYYY-MM-DD HH24:MI:SS') AS timestamp,
-                    ${columns}
-                FROM iot.${tableName}
-                WHERE timestamp BETWEEN $1 AND $2
-                ORDER BY timestamp ASC
-            `, [startDateTime, endDateTime]);
-
-            res.status(200).json({
-                data: result.rows,
-                date, start_time, end_time,
-            });
-        } catch (error) {
-            console.error(`❌ Lỗi lấy dữ liệu ${tableName}:`, error.message);
-            res.status(500).json({ error: "Lỗi server" });
-        }
-    });
-    router.get(`/api/${tableName}`, async (req, res) => {
-        try {
-            const { start_time, end_time } = req.query;
-
-            if (!start_time || !end_time) {
-                return res.status(400).json({ error: "Thiếu start_time hoặc end_time" });
-            }
-
-            const startDate = new Date(start_time);
-            const endDate = new Date(end_time);
-
-            if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-                return res.status(400).json({ error: "Định dạng thời gian không hợp lệ (YYYY-MM-DD HH:mm:ss hoặc ISO 8601)" });
-            }
-
-            if (startDate >= endDate) {
-                return res.status(400).json({ error: "Thời gian bắt đầu phải sớm hơn thời gian kết thúc" });
-            }
-
-            const columns = [...Array(sensorCount)]
-                .map((_, i) => `sensor${i + 1}_temperature`)
-                .join(', ');
-
-            const result = await req.client.query(`
-                SELECT id, TO_CHAR(timestamp, 'YYYY-MM-DD HH24:MI:SS') AS timestamp,
-                    ${columns}
-                FROM iot.${tableName}
-                WHERE timestamp BETWEEN $1 AND $2
-                ORDER BY timestamp ASC
-            `, [start_time, end_time]);
-
-            res.status(200).json({
-                data: result.rows,
-                start_time,
-                end_time,
-            });
-        } catch (error) {
-            console.error(`❌ Lỗi lấy dữ liệu ${tableName}:`, error.message);
-            res.status(500).json({ error: "Lỗi server" });
-        }
-    });
-    router.get(`/api/${tableName}/latest`, async (req, res) => {
-        try {
-            const columns = [...Array(sensorCount)]
-                .map((_, i) => `sensor${i + 1}_temperature`)
-                .join(', ');
-
-            const query = `
-                SELECT id, TO_CHAR(timestamp, 'YYYY-MM-DD HH24:MI:SS') AS timestamp,
-                    ${columns}
-                FROM iot.${tableName}
-                ORDER BY timestamp DESC
-                LIMIT 1;
-            `;
-
-            const result = await req.client.query(query);
-
-            if (result.rows.length === 0) {
-                return res.status(404).json({
-                    error: `Không tìm thấy dữ liệu trong bảng ${tableName}`
-                });
-            }
-
-            res.status(200).json({
-                data: result.rows[0],
-                table: tableName
-            });
-        } catch (error) {
-            console.error(`❌ Lỗi lấy dữ liệu mới nhất ${tableName}:`, error.message);
-            res.status(500).json({ error: "Lỗi server" });
-        }
-    });
-    // router.get(`/api/${tableName}/sample`, async (req, res) => {
-    //     const formatLocalTimestamp = (ts) => {
-    //         const date = new Date(ts);
-    //         const pad = (n) => String(n).padStart(2, '0');
-    //         return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-    //     };
-
-    //     try {
-    //         const { start_time, end_time, interval = 60 } = req.query;
-
-    //         if (!start_time || !end_time) {
-    //             return res.status(400).json({ error: "Thiếu start_time hoặc end_time" });
-    //         }
-
-    //         const startUTC = new Date(start_time);
-    //         const endUTC = new Date(end_time);
-
-    //         if (isNaN(startUTC.getTime()) || isNaN(endUTC.getTime())) {
-    //             return res.status(400).json({ error: "Định dạng thời gian không hợp lệ" });
-    //         }
-
-    //         if (startUTC >= endUTC) {
-    //             return res.status(400).json({ error: "Thời gian bắt đầu phải sớm hơn thời gian kết thúc" });
-    //         }
-
-    //         const columns = [...Array(sensorCount)]
-    //             .map((_, i) => `sensor${i + 1}_temperature`)
-    //             .join(', ');
-
-    //         const result = await req.client.query(`
-    //         SELECT id, timestamp AS timestamp_utc, ${columns}
-    //         FROM iot.${tableName}
-    //         WHERE timestamp BETWEEN $1 AND $2
-    //         ORDER BY timestamp ASC
-    //     `, [startUTC, endUTC]);
-
-    //         const rawData = result.rows;
-    //         if (!rawData.length) {
-    //             return res.status(404).json({ error: "Không tìm thấy dữ liệu" });
-    //         }
-
-    //         const sampleIntervalMs = parseInt(interval) * 60 * 1000;
-    //         const samplePoints = [];
-    //         let currentTime = new Date(startUTC);
-
-    //         while (currentTime <= endUTC) {
-    //             samplePoints.push(new Date(currentTime));
-    //             currentTime = new Date(currentTime.getTime() + sampleIntervalMs);
-    //         }
-
-    //         const seenTimestamps = new Set();
-    //         const maxDiffMs = 30 * 1000;
-
-    //         const sampledData = samplePoints.map(targetTime => {
-    //             let closestRecord = null;
-    //             let minDiff = Infinity;
-
-    //             rawData.forEach(record => {
-    //                 const recordTime = new Date(record.timestamp_utc);
-    //                 const diff = Math.abs(recordTime - targetTime);
-
-    //                 if (diff < minDiff && diff <= maxDiffMs && !seenTimestamps.has(record.timestamp_utc)) {
-    //                     minDiff = diff;
-    //                     closestRecord = record;
-    //                 }
-    //             });
-
-    //             if (closestRecord) {
-    //                 seenTimestamps.add(closestRecord.timestamp_utc);
-    //                 return { ...closestRecord };
-    //             }
-
-    //             return null;
-    //         }).filter(Boolean);
-
-    //         const addBoundaryPoint = (time) => {
-    //             const exists = sampledData.some(d =>
-    //                 Math.abs(new Date(d.timestamp_utc) - time) < 1000
-    //             );
-
-    //             if (!exists) {
-    //                 let closestRecord = null;
-    //                 let minDiff = Infinity;
-
-    //                 rawData.forEach(record => {
-    //                     const diff = Math.abs(new Date(record.timestamp_utc) - time);
-    //                     if (diff < minDiff) {
-    //                         minDiff = diff;
-    //                         closestRecord = record;
-    //                     }
-    //                 });
-
-    //                 if (closestRecord) {
-    //                     sampledData.push({ ...closestRecord });
-    //                 }
-    //             }
-    //         };
-
-    //         addBoundaryPoint(startUTC);
-    //         addBoundaryPoint(endUTC);
-
-    //         const responseData = sampledData
-    //             .map(item => ({
-    //                 id: item.id,
-    //                 timestamp: formatLocalTimestamp(item.timestamp_utc),
-    //                 ...Object.fromEntries(
-    //                     columns.split(', ').map(col => [col, item[col]])
-    //                 )
-    //             }))
-    //             .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-
-    //         console.log('First 3 records:', responseData.slice(0, 3));
-    //         console.log('Last 3 records:', responseData.slice(-3));
-
-    //         res.status(200).json({
-    //             data: responseData,
-    //             meta: {
-    //                 start_time: formatLocalTimestamp(startUTC),
-    //                 end_time: formatLocalTimestamp(endUTC),
-    //                 interval_minutes: parseInt(interval),
-    //                 sample_count: responseData.length,
-    //                 original_count: rawData.length,
-    //                 timezone: "Asia/Ho_Chi_Minh (GMT+7)"
-    //             }
-    //         });
-
-    //     } catch (error) {
-    //         console.error(`❌ Lỗi lấy dữ liệu ${tableName}:`, error);
-    //         res.status(500).json({
-    //             error: "Lỗi server",
-    //             details: error.message,
-    //             hint: "Kiểm tra log server để biết thêm chi tiết"
-    //         });
-    //     }
-    // });
-
-
-    router.get(`/api/${tableName}/sample`, async (req, res) => {
-        const formatLocalTimestamp = (ts) => {
-            const date = new Date(ts);
-            const pad = (n) => String(n).padStart(2, '0');
-            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-        };
-
-        try {
-            const { start_time, end_time, interval = 60 } = req.query;
-
-            if (!start_time || !end_time) {
-                return res.status(400).json({ error: "Thiếu start_time hoặc end_time" });
-            }
-
-            const startUTC = new Date(start_time);
-            const endUTC = new Date(end_time);
-
-            if (isNaN(startUTC.getTime()) || isNaN(endUTC.getTime())) {
-                return res.status(400).json({ error: "Định dạng thời gian không hợp lệ" });
-            }
-
-            if (startUTC >= endUTC) {
-                return res.status(400).json({ error: "Thời gian bắt đầu phải sớm hơn thời gian kết thúc" });
-            }
-
-            const columns = [...Array(sensorCount)]
-                .map((_, i) => `sensor${i + 1}_temperature`)
-                .join(', ');
-
-            const result = await req.client.query(`
-            SELECT id, timestamp AS timestamp_utc, ${columns}
-            FROM iot.${tableName}
-            WHERE timestamp BETWEEN $1 AND $2
-            ORDER BY timestamp ASC
-        `, [startUTC, endUTC]);
-
-            const rawData = result.rows;
-            if (!rawData.length) {
-                return res.status(404).json({ error: "Không tìm thấy dữ liệu" });
-            }
-
-            const sampleIntervalMs = parseInt(interval) * 60 * 1000;
-            const samplePoints = [];
-            let currentTime = new Date(startUTC);
-
-            while (currentTime <= endUTC) {
-                samplePoints.push(new Date(currentTime));
-                currentTime = new Date(currentTime.getTime() + sampleIntervalMs);
-            }
-
-            const isZeroSensor = (record) => {
-                return [...Array(sensorCount)].every((_, i) => record[`sensor${i + 1}_temperature`] === 0);
-            };
-
-            const seenTimestamps = new Set();
-            const maxDiffMs = 30 * 1000;
-            
-            const sampledData = samplePoints.map(targetTime => {
-                let closestRecord = null;
-                let minDiff = Infinity;
-
-                rawData.forEach(record => {
-                    const recordTime = new Date(record.timestamp_utc);
-                    const diff = Math.abs(recordTime - targetTime);
-                    const recordKey = `${record.timestamp_utc}`; // dùng để kiểm tra trùng timestamp
-
-                    if (diff < minDiff && diff <= maxDiffMs && !seenTimestamps.has(recordKey)) {
-                        minDiff = diff;
-                        closestRecord = record;
-                    }
-                });
-
-                if (closestRecord) {
-                    const recordKey = `${closestRecord.timestamp_utc}`;
-                    seenTimestamps.add(recordKey);
-                    return { ...closestRecord };
-                }
-
-                return null;
-            }).filter(Boolean);
-
-
-            const addBoundaryPoint = (time) => {
-                const exists = sampledData.some(d =>
-                    Math.abs(new Date(d.timestamp_utc) - time) < 1000
-                );
-
-                if (!exists) {
-                    let closestRecord = null;
-                    let minDiff = Infinity;
-
-                    rawData.forEach(record => {
-                        const diff = Math.abs(new Date(record.timestamp_utc) - time);
-                        if (diff < minDiff) {
-                            minDiff = diff;
-                            closestRecord = record;
-                        }
-                    });
-
-                    if (closestRecord) {
-                        sampledData.push({ ...closestRecord });
-                    }
-                }
-            };
-
-            addBoundaryPoint(startUTC);
-            addBoundaryPoint(endUTC);
-
-
-            // Loại bỏ trùng sau khi thêm mốc biên
-            const uniqueSampledData = [];
-            const seen = new Set();
-
-            for (const d of sampledData) {
-                const key = d.timestamp_utc;
-                if (!seen.has(key)) {
-                    seen.add(key);
-                    uniqueSampledData.push(d);
-                }
-            }
-
-            // Thay thế bản ghi cuối nếu toàn 0
-            uniqueSampledData.sort((a, b) => new Date(a.timestamp_utc) - new Date(b.timestamp_utc));
-
-            const last = uniqueSampledData[uniqueSampledData.length - 1];
-
-            if (isZeroSensor(last)) {
-                const alt = rawData
-                    .filter(rec =>
-                        new Date(rec.timestamp_utc) < endUTC &&
-                        !isZeroSensor(rec)
-                    )
-                    .sort((a, b) =>
-                        Math.abs(new Date(a.timestamp_utc) - endUTC) - Math.abs(new Date(b.timestamp_utc) - endUTC)
-                    )[0];
-
-                if (alt) {
-                    uniqueSampledData[uniqueSampledData.length - 1] = { ...alt };
-                }
-            }
-
-
-            const responseData = uniqueSampledData
-                .map(item => ({
-                    id: item.id,
-                    timestamp: formatLocalTimestamp(item.timestamp_utc),
-                    ...Object.fromEntries(
-                        columns.split(', ').map(col => [col, item[col]])
-                    )
-                }))
-                .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-
-            console.log('First 3 records:', responseData.slice(0, 3));
-            console.log('Last 3 records:', responseData.slice(-3));
-
-            res.status(200).json({
-                data: responseData,
-                meta: {
-                    start_time: formatLocalTimestamp(startUTC),
-                    end_time: formatLocalTimestamp(endUTC),
-                    interval_minutes: parseInt(interval),
-                    sample_count: responseData.length,
-                    original_count: rawData.length,
-                    timezone: "Asia/Ho_Chi_Minh (GMT+7)"
-                }
-            });
-
-        } catch (error) {
-            console.error(`❌ Lỗi lấy dữ liệu ${tableName}:`, error);
-            res.status(500).json({
-                error: "Lỗi server",
-                details: error.message,
-                hint: "Kiểm tra log server để biết thêm chi tiết"
-            });
-        }
-    });
+dayjs.extend(require('dayjs/plugin/utc'));
+dayjs.extend(require('dayjs/plugin/timezone'));
+
+// Helpers
+const buildSensorColumns = (sensorCount) =>
+  [...Array(sensorCount)].map((_, i) => `sensor${i + 1}_temperature`);
+const validateDateRange = (start, end) => {
+  const s = new Date(start), e = new Date(end);
+  if (isNaN(s) || isNaN(e)) return "Định dạng thời gian không hợp lệ";
+  if (s >= e) return "Thời gian bắt đầu phải sớm hơn thời gian kết thúc";
+  return null;
 };
+const formatTimestamp = (ts) => dayjs(ts).tz("Asia/Ho_Chi_Minh").format("YYYY-MM-DD HH:mm:ss");
 
-['t4', 't5', 'g1', 'g2', 'g3'].forEach(table => createSensorRoutes(table));
+function createSensorRoutes(tableName, sensorCount = 8) {
+  const columns = buildSensorColumns(sensorCount).join(', ');
 
+  router.post(`/api/${tableName}`, async (req, res) => {
+    const sensors = buildSensorColumns(sensorCount).map(col => req.body[col]);
+
+    if (sensors.some(val => val == null)) {
+      return res.status(400).json({ error: "Thiếu dữ liệu sensor" });
+    }
+
+    const placeholders = sensors.map((_, i) => `$${i + 1}`).join(', ');
+    const query = `
+      INSERT INTO iot.${tableName} (${columns}, timestamp)
+      VALUES (${placeholders}, CURRENT_TIMESTAMP)
+      RETURNING id;
+    `;
+
+    try {
+      const result = await req.client.query(query, sensors);
+      res.status(201).json({ id: result.rows[0]?.id, message: "Thêm dữ liệu thành công" });
+    } catch (error) {
+      console.error(`❌ Lỗi thêm dữ liệu ${tableName}:`, error.message);
+      res.status(500).json({ error: "Lỗi server" });
+    }
+  });
+
+  router.get(`/api/${tableName}`, async (req, res) => {
+    const { start_time, end_time } = req.query;
+    const errorMsg = validateDateRange(start_time, end_time);
+    if (errorMsg) return res.status(400).json({ error: errorMsg });
+
+    try {
+      const result = await req.client.query(`
+        SELECT id, TO_CHAR(timestamp, 'YYYY-MM-DD HH24:MI:SS') AS timestamp, ${columns}
+        FROM iot.${tableName}
+        WHERE timestamp BETWEEN $1 AND $2
+        ORDER BY timestamp ASC;
+      `, [start_time, end_time]);
+
+      res.status(200).json({ data: result.rows, start_time, end_time });
+    } catch (error) {
+      console.error(`❌ Lỗi lấy dữ liệu ${tableName}:`, error.message);
+      res.status(500).json({ error: "Lỗi server" });
+    }
+  });
+
+  router.get(`/api/daily/${tableName}`, async (req, res) => {
+    const { date, start_time = "00:00:00", end_time = "23:59:59" } = req.query;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: "Định dạng ngày không hợp lệ (YYYY-MM-DD)" });
+    }
+    const errorMsg = validateDateRange(`${date} ${start_time}`, `${date} ${end_time}`);
+    if (errorMsg) return res.status(400).json({ error: errorMsg });
+
+    try {
+      const result = await req.client.query(`
+        SELECT id, TO_CHAR(timestamp, 'YYYY-MM-DD HH24:MI:SS') AS timestamp, ${columns}
+        FROM iot.${tableName}
+        WHERE timestamp BETWEEN $1 AND $2
+        ORDER BY timestamp ASC;
+      `, [`${date} ${start_time}`, `${date} ${end_time}`]);
+
+      res.status(200).json({ data: result.rows, date, start_time, end_time });
+    } catch (error) {
+      console.error(`❌ Lỗi lấy dữ liệu ${tableName}:`, error.message);
+      res.status(500).json({ error: "Lỗi server" });
+    }
+  });
+
+  router.get(`/api/${tableName}/latest`, async (req, res) => {
+    try {
+      const result = await req.client.query(`
+        SELECT id, TO_CHAR(timestamp, 'YYYY-MM-DD HH24:MI:SS') AS timestamp, ${columns}
+        FROM iot.${tableName}
+        ORDER BY timestamp DESC
+        LIMIT 1;
+      `);
+
+      if (!result.rows.length) {
+        return res.status(404).json({ error: `Không tìm thấy dữ liệu trong bảng ${tableName}` });
+      }
+
+      res.status(200).json({ data: result.rows[0], table: tableName });
+    } catch (error) {
+      console.error(`❌ Lỗi lấy dữ liệu mới nhất ${tableName}:`, error.message);
+      res.status(500).json({ error: "Lỗi server" });
+    }
+  });
+
+  router.get(`/api/${tableName}/sample`, async (req, res) => {
+    try {
+      const { start_time, end_time, interval = 60 } = req.query;
+      const errorMsg = validateDateRange(start_time, end_time);
+      if (errorMsg) return res.status(400).json({ error: errorMsg });
+
+      const intervalMs = parseInt(interval) * 60 * 1000;
+      const start = new Date(start_time), end = new Date(end_time);
+
+      const result = await req.client.query(`
+        SELECT id, timestamp AS timestamp_utc, ${columns}
+        FROM iot.${tableName}
+        WHERE timestamp BETWEEN $1 AND $2
+        ORDER BY timestamp ASC;
+      `, [start, end]);
+
+      const rawData = result.rows;
+      if (!rawData.length) return res.status(404).json({ error: "Không tìm thấy dữ liệu" });
+
+      const sampleTimes = [];
+      for (let t = start.getTime(); t <= end.getTime(); t += intervalMs) {
+        sampleTimes.push(new Date(t));
+      }
+
+      const seenTimestamps = new Set();
+      const maxDiff = 30 * 1000;
+      const sampledData = sampleTimes.map(target => {
+        let nearest = null, minDiff = Infinity;
+        for (const row of rawData) {
+          const t = new Date(row.timestamp_utc);
+          const diff = Math.abs(t - target);
+          if (diff <= maxDiff && diff < minDiff && !seenTimestamps.has(row.timestamp_utc)) {
+            nearest = row;
+            minDiff = diff;
+          }
+        }
+        if (nearest) seenTimestamps.add(nearest.timestamp_utc);
+        return nearest;
+      }).filter(Boolean);
+
+      const final = Array.from(new Set([
+        ...sampledData,
+        ...[start, end].map(bound => rawData.reduce((acc, cur) =>
+          Math.abs(new Date(cur.timestamp_utc) - bound) < Math.abs(new Date(acc.timestamp_utc) - bound) ? cur : acc
+        ))
+      ].map(row => row.timestamp_utc)))
+        .map(ts => rawData.find(r => r.timestamp_utc === ts))
+        .filter(Boolean);
+
+      const isZeroRow = (row) => buildSensorColumns(sensorCount).every(col => row[col] === 0);
+      const lastValid = [...rawData].reverse().find(r => !isZeroRow(r));
+      if (isZeroRow(final[final.length - 1]) && lastValid) {
+        final[final.length - 1] = lastValid;
+      }
+
+      res.status(200).json({
+        data: final.map(r => ({
+          id: r.id,
+          timestamp: formatTimestamp(r.timestamp_utc),
+          ...Object.fromEntries(buildSensorColumns(sensorCount).map(col => [col, r[col]]))
+        })),
+        meta: {
+          start_time: formatTimestamp(start),
+          end_time: formatTimestamp(end),
+          interval_minutes: parseInt(interval),
+          sample_count: final.length,
+          original_count: rawData.length,
+          timezone: "Asia/Ho_Chi_Minh (GMT+7)"
+        }
+      });
+    } catch (error) {
+      console.error(`❌ Lỗi lấy sample ${tableName}:`, error.message);
+      res.status(500).json({ error: "Lỗi server", details: error.message });
+    }
+  });
+}
+
+['t4', 't5', 'g1', 'g2', 'g3'].forEach((table) => createSensorRoutes(table));
 module.exports = router;
