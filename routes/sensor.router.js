@@ -20,11 +20,40 @@ const formatTimestamp = (ts) => dayjs(ts).tz("Asia/Ho_Chi_Minh").format("YYYY-MM
 function createSensorRoutes(tableName, sensorCount = 8) {
     const columns = buildSensorColumns(sensorCount).join(', ');
 
+    // router.post(`/api/${tableName}`, async (req, res) => {
+    //     const sensors = buildSensorColumns(sensorCount).map(col => req.body[col]);
+
+    //     if (sensors.some(val => val == null)) {
+    //         return res.status(400).json({ error: "Thiếu dữ liệu sensor" });
+    //     }
+
+    //     const placeholders = sensors.map((_, i) => `$${i + 1}`).join(', ');
+    //     const query = `
+    //   INSERT INTO iot.${tableName} (${columns}, timestamp)
+    //   VALUES (${placeholders}, CURRENT_TIMESTAMP)
+    //   RETURNING id;
+    // `;
+
+    //     try {
+    //         const result = await req.client.query(query, sensors);
+    //         res.status(201).json({ id: result.rows[0]?.id, message: "Thêm dữ liệu thành công" });
+    //     } catch (error) {
+    //         console.error(`❌ Lỗi thêm dữ liệu ${tableName}:`, error.message);
+    //         res.status(500).json({ error: "Lỗi server" });
+    //     }
+    // });
+
     router.post(`/api/${tableName}`, async (req, res) => {
         const sensors = buildSensorColumns(sensorCount).map(col => req.body[col]);
 
+        // Bỏ qua nếu thiếu dữ liệu
         if (sensors.some(val => val == null)) {
-            return res.status(400).json({ error: "Thiếu dữ liệu sensor" });
+            return res.sendStatus(204); // No Content
+        }
+
+        // Bỏ qua nếu có sensor không hợp lệ: khác 0 và nằm ngoài khoảng 5–700
+        if (sensors.some(val => val !== 0 && (val < 5 || val > 700))) {
+            return res.sendStatus(204); // No Content
         }
 
         const placeholders = sensors.map((_, i) => `$${i + 1}`).join(', ');
@@ -39,38 +68,9 @@ function createSensorRoutes(tableName, sensorCount = 8) {
             res.status(201).json({ id: result.rows[0]?.id, message: "Thêm dữ liệu thành công" });
         } catch (error) {
             console.error(`❌ Lỗi thêm dữ liệu ${tableName}:`, error.message);
-            res.status(500).json({ error: "Lỗi server" });
+            res.sendStatus(500);
         }
     });
-
-    // router.post(`/api/${tableName}`, async (req, res) => { 
-    // const sensors = buildSensorColumns(sensorCount).map(col => req.body[col]);
-
-    // // Bỏ qua nếu thiếu dữ liệu
-    // if (sensors.some(val => val == null)) {
-    //     return res.sendStatus(204); // No Content
-    // }
-
-    // // Bỏ qua nếu có sensor không hợp lệ (<5 hoặc >700)
-    // if (sensors.some(val => val < 5 || val > 700)) {
-    //     return res.sendStatus(204); // No Content
-    // }
-
-    // const placeholders = sensors.map((_, i) => `$${i + 1}`).join(', ');
-    // const query = `
-    //   INSERT INTO iot.${tableName} (${columns}, timestamp)
-    //   VALUES (${placeholders}, CURRENT_TIMESTAMP)
-    //   RETURNING id;
-    // `;
-
-    // try {
-    //     const result = await req.client.query(query, sensors);
-    //     res.status(201).json({ id: result.rows[0]?.id, message: "Thêm dữ liệu thành công" });
-    // } catch (error) {
-    //     console.error(`❌ Lỗi thêm dữ liệu ${tableName}:`, error.message);
-    //     res.sendStatus(500);
-    // }
-    // });
 
     router.get(`/api/${tableName}`, async (req, res) => {
         const { start_time, end_time } = req.query;
